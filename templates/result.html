@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congestion-Aware Route Optimizer — G10</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6; color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 2rem 1rem;
+        }
+        .container { background: rgba(255,255,255,0.95); border-radius: 24px; padding: 3rem; box-shadow: 0 25px 50px rgba(0,0,0,0.15); max-width: 1100px; margin: 0 auto; }
+        h1 { color: #2c3e50; margin-bottom: 0.5rem; font-size: 2rem; font-weight: 700; text-align: center; }
+        .subtitle { text-align:center; color:#666; margin-bottom:2rem; }
+        /* ERROR BANNER */
+        .error-banner { background: rgba(231,76,60,0.08); border-left: 5px solid #e74c3c; border-radius: 0 14px 14px 0; padding: 1.5rem 2rem; margin-bottom: 2rem; }
+        .error-banner h2 { color: #e74c3c; margin-bottom: 0.5rem; font-size: 1.1rem; }
+        .error-banner p { color: #555; font-size: 0.95rem; }
+        /* OPTIMAL BANNER */
+        .optimal-banner {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            border-radius: 16px; padding: 1.75rem 2rem; margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(17,153,142,0.3); color: white;
+        }
+        .optimal-banner h2 { font-size: 1.3rem; margin-bottom: 0.75rem; opacity: 0.9; }
+        .optimal-path { font-family: 'Courier New', monospace; font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; word-break: break-all; }
+        .node { display:inline-block; background:rgba(255,255,255,0.25); padding:0.2rem 0.6rem; border-radius:6px; margin:0.1rem; }
+        .arrow { opacity:0.7; margin:0 0.2rem; }
+        .optimal-stats { display:flex; gap:2rem; flex-wrap:wrap; }
+        .ostat { background:rgba(255,255,255,0.2); padding:0.6rem 1rem; border-radius:10px; }
+        .ostat-label { font-size:0.78rem; opacity:0.85; display:block; }
+        .ostat-val { font-size:1.2rem; font-weight:700; }
+        /* NET INFO STRIP */
+        .net-info { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+        .net-chip { padding:0.35rem 0.9rem; border-radius:20px; background:rgba(102,126,234,0.1); border:1px solid rgba(102,126,234,0.2); color:#667eea; font-size:0.82rem; font-weight:600; }
+        /* SECTION CARDS */
+        .section-card { background:white; border-radius:16px; padding:2rem; margin-bottom:1.5rem; box-shadow:0 8px 25px rgba(0,0,0,0.08); }
+        .section-card h2 { color:#2c3e50; margin-bottom:1.25rem; font-size:1.2rem; }
+        table { width:100%; border-collapse:collapse; border-radius:12px; overflow:hidden; font-size:0.9rem; }
+        thead tr { background: linear-gradient(135deg, #2c3e50, #34495e); color:white; }
+        th { padding:1rem 0.75rem; text-align:left; font-weight:600; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.4px; }
+        td { padding:0.9rem 0.75rem; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:#fafafe; }
+        tr.optimal-row td { background: rgba(17,153,142,0.06); }
+        tr.optimal-row td:first-child { border-left:4px solid #11998e; }
+        .path-cell { font-family:'Courier New',monospace; font-size:0.82rem; color:#444; word-break:break-all; }
+        .cost-val { font-weight:700; color:#e74c3c; }
+        .time-val { font-weight:700; color:#3498db; }
+        .hops-val { font-weight:600; color:#8e44ad; }
+        .tag { display:inline-block; padding:0.15rem 0.5rem; border-radius:10px; font-size:0.72rem; font-weight:600; margin-left:0.4rem; }
+        .tag-best { background:rgba(17,153,142,0.15); color:#11998e; }
+        .tag-fast { background:rgba(52,152,219,0.15); color:#2980b9; }
+        .badge-inf { color:#bbb; font-style:italic; font-size:0.82rem; }
+        /* ALGO CARDS */
+        .algo-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1rem; }
+        .algo-card { padding:1.25rem 1.5rem; border-radius:14px; border:2px solid #e1e5e9; transition:0.2s; position:relative; }
+        .algo-card:hover { border-color:#667eea; box-shadow:0 6px 20px rgba(102,126,234,0.12); }
+        .algo-card.is-optimal { border-color:#11998e; background:rgba(17,153,142,0.04); }
+        .algo-card-name { font-weight:700; color:#2c3e50; font-size:0.95rem; margin-bottom:0.35rem; }
+        .algo-card-desc { font-size:0.8rem; color:#777; margin-bottom:0.75rem; line-height:1.5; }
+        .algo-card-path { font-family:'Courier New',monospace; font-size:0.78rem; color:#555; background:#f8f9fa; padding:0.5rem 0.75rem; border-radius:8px; margin-bottom:0.6rem; word-break:break-all; }
+        .algo-card-meta { display:flex; gap:0.75rem; flex-wrap:wrap; }
+        .meta-chip { font-size:0.78rem; font-weight:600; padding:0.2rem 0.55rem; border-radius:8px; }
+        .meta-cost { background:rgba(231,76,60,0.1); color:#e74c3c; }
+        .meta-time { background:rgba(52,152,219,0.1); color:#2980b9; }
+        .meta-hops { background:rgba(142,68,173,0.1); color:#8e44ad; }
+        .meta-complex { background:rgba(0,0,0,0.06); color:#555; font-family:monospace; }
+        .no-path { color:#e74c3c; font-style:italic; font-size:0.82rem; }
+        .optimal-badge { position:absolute; top:0.75rem; right:0.75rem; background:linear-gradient(135deg,#11998e,#38ef7d); color:white; padding:0.2rem 0.6rem; border-radius:10px; font-size:0.72rem; font-weight:700; }
+        /* NETWORK IMAGE */
+        .net-img { width:100%; max-width:700px; border-radius:14px; display:block; margin:0 auto; box-shadow:0 8px 25px rgba(0,0,0,0.12); }
+        .btn { display:inline-flex; align-items:center; gap:0.5rem; background:linear-gradient(135deg,#11998e,#38ef7d); color:white; padding:0.875rem 2rem; border-radius:12px; text-decoration:none; font-weight:600; font-size:1rem; transition:0.3s; margin-top:2rem; }
+        .btn:hover { transform:translateY(-2px); box-shadow:0 10px 25px rgba(17,153,142,0.4); }
+        .tabs { display:flex; gap:0.5rem; margin-bottom:1.5rem; border-bottom:2px solid #f0f0f0; padding-bottom:0.5rem; }
+        .tab-btn { padding:0.5rem 1.1rem; border:none; background:none; cursor:pointer; font-size:0.88rem; color:#888; border-radius:8px 8px 0 0; font-weight:600; transition:0.2s; }
+        .tab-btn.active { color:#667eea; background:rgba(102,126,234,0.08); }
+        .view-panel { display:none; }
+        .view-panel.active { display:block; }
+        .info-note { background:rgba(102,126,234,0.06); border-left:3px solid #667eea; border-radius:0 8px 8px 0; padding:0.75rem 1rem; font-size:0.82rem; color:#555; margin-bottom:1rem; }
+        @media(max-width:600px){ .container{padding:1.5rem;} .optimal-stats{gap:1rem;} }
+    </style>
+</head>
+<body>
+<div class="container">
+
+{% if result %}
+  {% if result.error %}
+    <h1>⚠️ Route Computation</h1>
+    <div class="error-banner">
+        <h2>🚫 Cannot Compute Route</h2>
+        <p>{{ result.error }}</p>
+        <p style="margin-top:0.5rem;font-size:0.85rem;color:#888">
+            Source: <strong>{{ result.source }}</strong> → Destination: <strong>{{ result.destination }}</strong>
+        </p>
+    </div>
+  {% else %}
+    <h1>⚖️ Algorithm Comparison</h1>
+    <p class="subtitle">
+        {{ result.source }} → {{ result.destination }}
+        &nbsp;·&nbsp; {{ result.results|length }} algorithms run
+    </p>
+
+    <!-- Gap 2 — Congestion-Active Banner -->
+    {% if congestion_active %}
+    <div style="background:rgba(231,76,60,0.09);border-left:5px solid #e74c3c;border-radius:0 14px 14px 0;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:0.75rem">
+        <span style="font-size:1.3rem">🔴</span>
+        <div>
+            <strong style="color:#c0392b;font-size:0.95rem">Congestion is active — the path shown is the congestion-aware re-routed result.</strong>
+            <p style="font-size:0.8rem;color:#888;margin-top:0.2rem">All algorithm costs now include congestion penalties on affected links.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Gap 3 — Context-Aware Algorithm Recommendation -->
+    {% if algorithm_rec %}
+    <div style="background:rgba(17,153,142,0.08);border-left:5px solid #11998e;border-radius:0 14px 14px 0;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:0.75rem">
+        <span style="font-size:1.3rem">🧠</span>
+        <div>
+            <strong style="color:#0a7a5e;font-size:0.95rem">Recommended Algorithm: {{ algorithm_rec.algo }}</strong>
+            <p style="font-size:0.82rem;color:#555;margin-top:0.2rem">{{ algorithm_rec.reason }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if result.network_info %}
+    <div class="net-info">
+        <span class="net-chip">{{ result.network_info.routers }} routers</span>
+        <span class="net-chip">{{ result.network_info.links }} links</span>
+        {% if result.network_info.connected %}<span class="net-chip" style="background:rgba(17,153,142,0.1);border-color:rgba(17,153,142,0.3);color:#11998e">✅ Connected</span>{% else %}<span class="net-chip" style="background:rgba(231,76,60,0.1);border-color:rgba(231,76,60,0.3);color:#e74c3c">⚠ Partitioned</span>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if result.optimal %}
+    <div class="optimal-banner">
+        {% if result.tied_count and result.tied_count > 1 %}
+        <h2>🏆 Optimal Path — {{ result.tied_count }} Algorithms Tied at Cost {{ result.optimal.cost }}</h2>
+        {% else %}
+        <h2>🏆 Optimal Path — {{ result.optimal.name }}</h2>
+        {% endif %}
+        <div class="optimal-path">
+            {% for node in result.optimal.path %}
+                <span class="node">
+                    {{ node }}
+                    {% if result.path_ips and result.path_ips[node] %}
+                    <span style="font-size:0.65rem;opacity:0.75;display:block;font-weight:400;font-family:monospace">{{ result.path_ips[node] }}</span>
+                    {% endif %}
+                </span>{% if not loop.last %}<span class="arrow">→</span>{% endif %}
+            {% endfor %}
+        </div>
+        {% if result.tied_count and result.tied_count > 1 %}
+        <div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+            <span style="font-size:0.75rem;opacity:0.75;margin-right:0.25rem">All optimal algorithms:</span>
+            {% for name in result.tied_names %}
+            <span style="background:rgba(255,255,255,0.25);padding:0.18rem 0.6rem;border-radius:8px;font-size:0.78rem;font-weight:700">{{ name }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="optimal-stats">
+            <div class="ostat"><span class="ostat-label">Total Cost</span><span class="ostat-val">{{ result.optimal.cost }}</span></div>
+            <div class="ostat"><span class="ostat-label">Hops</span><span class="ostat-val">{{ result.optimal.hops }}</span></div>
+            <div class="ostat"><span class="ostat-label">Exec Time</span><span class="ostat-val">{{ result.optimal.time_ms }} ms</span></div>
+            <div class="ostat"><span class="ostat-label">Complexity</span><span class="ostat-val" style="font-size:0.95rem">{{ result.optimal.complexity }}</span></div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── LIVE CAPTURE LAUNCH PANEL ── -->
+    <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;padding:1.4rem 1.75rem;margin-bottom:1.75rem;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;box-shadow:0 10px 30px rgba(0,0,0,0.2)">
+        <div style="flex:1;min-width:220px">
+            <div style="color:rgba(255,255,255,0.55);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.3rem">🔬 Next Step — Live Packet Capture</div>
+            <div style="color:white;font-weight:700;font-size:1rem;margin-bottom:0.25rem">Capture traffic on this exact path</div>
+            {% if result.src_ip and result.dst_ip %}
+            <div style="color:rgba(255,255,255,0.65);font-size:0.82rem">
+                <span style="font-family:monospace;background:rgba(255,255,255,0.1);padding:0.15rem 0.5rem;border-radius:6px">{{ result.src_ip }}</span>
+                <span style="margin:0 0.4rem;opacity:0.5">→</span>
+                <span style="font-family:monospace;background:rgba(255,255,255,0.1);padding:0.15rem 0.5rem;border-radius:6px">{{ result.dst_ip }}</span>
+            </div>
+            {% else %}
+            <div style="color:rgba(255,255,255,0.5);font-size:0.82rem">Configure source and destination IPs on the capture page</div>
+            {% endif %}
+            {% if congestion_active %}
+            <div style="margin-top:0.5rem;display:inline-block;background:rgba(231,76,60,0.25);border:1px solid rgba(231,76,60,0.5);color:#ff8a80;padding:0.2rem 0.65rem;border-radius:8px;font-size:0.75rem;font-weight:700">
+                🔴 Congestion active — capture will reveal impact packets
+            </div>
+            {% endif %}
+        </div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+            {% if result.src_ip and result.dst_ip %}
+            <a href="/packet_analyzer?src={{ result.src_ip }}&dst={{ result.dst_ip }}&autostart=1{% if congestion_active %}&congestion=1{% endif %}"
+               style="display:inline-flex;align-items:center;gap:0.5rem;background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:0.8rem 1.5rem;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.9rem;box-shadow:0 4px 15px rgba(102,126,234,0.4);white-space:nowrap">
+                ▶ Launch Live Capture
+            </a>
+            {% if congestion_active %}
+            <a href="/packet_analyzer?src={{ result.src_ip }}&dst={{ result.dst_ip }}&autostart=1&congestion=1&filter=ICMP"
+               style="display:inline-flex;align-items:center;gap:0.5rem;background:linear-gradient(135deg,#e74c3c,#c0392b);color:white;padding:0.8rem 1.25rem;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.9rem;white-space:nowrap">
+                🔴 Capture Congestion Probe
+            </a>
+            {% endif %}
+            {% else %}
+            <a href="/packet_analyzer"
+               style="display:inline-flex;align-items:center;gap:0.5rem;background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:0.8rem 1.5rem;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.9rem;box-shadow:0 4px 15px rgba(102,126,234,0.4);white-space:nowrap">
+                ▶ Launch Live Capture
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+
+    {% if protocol_map %}
+    <div class="section-card" style="margin-bottom:1.5rem">
+        <h2 style="color:#2c3e50;font-size:1.1rem;margin-bottom:0.3rem">📚 Ch4 — Routing Protocol Mapping</h2>
+        <p style="font-size:0.8rem;color:#888;margin-bottom:1rem">Each algorithm in this project corresponds to a real-world routing protocol used in the internet.</p>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+            <thead><tr style="background:linear-gradient(135deg,#2c3e50,#34495e);color:white">
+                <th style="padding:0.65rem 0.9rem;text-align:left">Algorithm</th>
+                <th style="padding:0.65rem 0.9rem;text-align:left">Real Protocol</th>
+                <th style="padding:0.65rem 0.9rem;text-align:left">Type</th>
+                <th style="padding:0.65rem 0.9rem;text-align:left">Domain</th>
+                <th style="padding:0.65rem 0.9rem;text-align:left">Deployed In</th>
+            </tr></thead>
+            <tbody>
+            {% for pm in protocol_map %}
+            <tr style="border-bottom:1px solid #f0f0f0" {% if result.tied_names and pm.algo in result.tied_names %}style="background:rgba(17,153,142,0.04)"{% endif %}>
+                <td style="padding:0.6rem 0.9rem;font-weight:700;color:#2c3e50">{{ pm.algo }}</td>
+                <td style="padding:0.6rem 0.9rem;color:#667eea;font-weight:600">{{ pm.protocol }}</td>
+                <td style="padding:0.6rem 0.9rem">
+                    <span style="background:{% if pm.type == 'Link-State' %}rgba(17,153,142,0.12){% elif pm.type == 'Distance-Vector' %}rgba(231,76,60,0.12){% else %}rgba(102,126,234,0.12){% endif %};color:{% if pm.type == 'Link-State' %}#11998e{% elif pm.type == 'Distance-Vector' %}#e74c3c{% else %}#667eea{% endif %};padding:0.1rem 0.5rem;border-radius:6px;font-size:0.75rem;font-weight:700">{{ pm.type }}</span>
+                </td>
+                <td style="padding:0.6rem 0.9rem">
+                    <span style="background:{% if pm.domain == 'IGP' %}rgba(52,152,219,0.12){% else %}rgba(243,156,18,0.12){% endif %};color:{% if pm.domain == 'IGP' %}#2980b9{% else %}#d4830a{% endif %};padding:0.1rem 0.5rem;border-radius:6px;font-size:0.72rem;font-weight:700">{{ pm.domain }}</span>
+                </td>
+                <td style="padding:0.6rem 0.9rem;font-size:0.78rem;color:#666">{{ pm.deployed_in }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <p style="font-size:0.75rem;color:#aaa;margin-top:0.6rem">IGP = Interior Gateway Protocol (within one AS) · EGP = Exterior Gateway Protocol (between ASes, e.g. BGP)</p>
+    </div>
+    {% endif %}
+
+    <!-- ── RIP WARNING ── Ch4 Distance-Vector ── -->
+    {% if rip_warn and rip_warn.warning %}
+    <div style="background:rgba(231,76,60,0.07);border-left:4px solid #e74c3c;border-radius:0 12px 12px 0;padding:1rem 1.25rem;margin-bottom:1.5rem">
+        <strong style="color:#e74c3c">{{ rip_warn.message }}</strong>
+        <p style="font-size:0.82rem;color:#666;margin-top:0.4rem">{{ rip_warn.detail }}</p>
+        <p style="font-size:0.75rem;color:#aaa;margin-top:0.25rem"><em>{{ rip_warn.syllabus }}</em></p>
+    </div>
+    {% endif %}
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchView('cards',this)">🃏 Algorithm Cards</button>
+        <button class="tab-btn" onclick="switchView('table',this)">📊 Comparison Table</button>
+        {% if result.image %}<button class="tab-btn" onclick="switchView('graph',this)">📡 Network Graph</button>{% endif %}
+    </div>
+
+    <!-- CARDS VIEW -->
+    <div id="view-cards" class="view-panel active">
+        <div class="algo-cards">
+        {% for r in result.results %}
+            <div class="algo-card {% if result.tied_names and r.name in result.tied_names %}is-optimal{% endif %}">
+                {% if result.tied_names and r.name in result.tied_names %}
+                <span class="optimal-badge">{% if result.tied_count > 1 %}✓ TIED OPTIMAL{% else %}✓ OPTIMAL{% endif %}</span>
+                {% endif %}
+                <div class="algo-card-name">{{ r.name }}</div>
+                <div class="algo-card-desc">{{ r.description }}</div>
+                {% if r.path %}
+                    <div class="algo-card-path">{{ r.path | join(' → ') }}</div>
+                    <div class="algo-card-meta">
+                        <span class="meta-chip meta-cost">Cost: {{ r.cost }}</span>
+                        <span class="meta-chip meta-time">{{ r.time_ms }} ms</span>
+                        <span class="meta-chip meta-hops">{{ r.hops }} hops</span>
+                        <span class="meta-chip meta-complex">{{ r.complexity }}</span>
+                    </div>
+                    {% if r.notes %}<p style="font-size:0.76rem;color:#888;margin-top:0.5rem">{{ r.notes }}</p>{% endif %}
+                {% else %}
+                    <div class="no-path">⚠ No valid path found</div>
+                    {% if r.notes %}<p style="font-size:0.76rem;color:#aaa;margin-top:0.3rem">{{ r.notes }}</p>{% endif %}
+                {% endif %}
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+
+    <!-- TABLE VIEW -->
+    <div id="view-table" class="view-panel">
+        <div class="section-card">
+            {% set min_cost = namespace(val=999999) %}
+            {% set min_time = namespace(val=999999) %}
+            {% for r in result.results %}
+                {% if r.path and r.cost < min_cost.val %}{% set min_cost.val = r.cost %}{% endif %}
+                {% if r.time_ms < min_time.val %}{% set min_time.val = r.time_ms %}{% endif %}
+            {% endfor %}
+            <table>
+                <thead><tr>
+                    <th>Algorithm</th><th>Path</th><th>Cost</th>
+                    <th>Time (ms)</th><th>Hops</th><th>Complexity</th>
+                </tr></thead>
+                <tbody>
+                {% for r in result.results %}
+                <tr {% if result.optimal and r.name == result.optimal.name %}class="optimal-row"{% endif %}>
+                    <td><strong>{{ r.name }}</strong>
+                        {% if result.tied_names and r.name in result.tied_names %}<span class="tag tag-best">{% if result.tied_count > 1 %}TIED BEST{% else %}BEST{% endif %}</span>{% endif %}
+                    </td>
+                    <td class="path-cell">
+                        {% if r.path %}{{ r.path | join(' → ') }}{% else %}<span class="badge-inf">no path</span>{% endif %}
+                    </td>
+                    <td class="cost-val">
+                        {% if r.path %}{{ r.cost }}
+                            {% if r.cost == min_cost.val %}<span class="tag tag-best">↓ {{ result.tied_count }} algorithms</span>{% endif %}
+                        {% else %}<span class="badge-inf">∞</span>{% endif %}
+                    </td>
+                    <td class="time-val">{{ r.time_ms }}
+                        {% if r.time_ms == min_time.val %}<span class="tag tag-fast">↓ fastest</span>{% endif %}
+                    </td>
+                    <td class="hops-val">{{ r.hops }}</td>
+                    <td style="font-family:monospace;font-size:0.8rem;color:#666">{{ r.complexity }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if result.image %}
+    <div id="view-graph" class="view-panel">
+        <div class="section-card">
+            <h2>📡 Network Topology (Optimal Path Highlighted in Green)</h2>
+            <p class="info-note" style="margin-bottom:1rem">🟢 Green edges show the optimal path · 🔴 Red = Source · 🟡 Yellow = Destination · 🔵 Blue = Intermediate routers</p>
+            <img src="{{ url_for('static', filename=result.image) }}" class="net-img" alt="Network graph">
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Gap 4 — Before vs After Congestion Comparison -->
+    {% if comparison and congestion_active %}
+    <div class="section-card" style="margin-top:1.5rem">
+        <h2>📊 Before vs After Congestion — Cost Impact Per Algorithm</h2>
+        <p style="font-size:0.82rem;color:#888;margin-bottom:1rem">Compares each algorithm's routing cost before congestion was applied vs the current congestion-aware result.</p>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.87rem">
+            <thead><tr style="background:linear-gradient(135deg,#2c3e50,#34495e);color:white">
+                <th style="padding:0.75rem 1rem;text-align:left">Algorithm</th>
+                <th style="padding:0.75rem 1rem;text-align:right">Cost Before</th>
+                <th style="padding:0.75rem 1rem;text-align:right">Cost After</th>
+                <th style="padding:0.75rem 1rem;text-align:right">Delta</th>
+                <th style="padding:0.75rem 1rem;text-align:center">Re-Routed?</th>
+            </tr></thead>
+            <tbody>
+            {% for row in comparison %}
+            <tr style="border-bottom:1px solid #f0f0f0">
+                <td style="padding:0.7rem 1rem;font-weight:700;color:#2c3e50">{{ row.algo }}</td>
+                <td style="padding:0.7rem 1rem;text-align:right;color:#888">{{ row.cost_before }}</td>
+                <td style="padding:0.7rem 1rem;text-align:right;font-weight:700;color:#e74c3c">{{ row.cost_after }}</td>
+                <td style="padding:0.7rem 1rem;text-align:right">
+                    {% if row.delta > 0 %}
+                    <span style="color:#e74c3c;font-weight:700">+{{ row.delta }}</span>
+                    {% elif row.delta < 0 %}
+                    <span style="color:#11998e;font-weight:700">{{ row.delta }}</span>
+                    {% else %}
+                    <span style="color:#888">0</span>
+                    {% endif %}
+                </td>
+                <td style="padding:0.7rem 1rem;text-align:center">
+                    {% if row.rerouted %}
+                    <span style="background:rgba(231,76,60,0.12);color:#c0392b;padding:0.15rem 0.6rem;border-radius:8px;font-size:0.78rem;font-weight:700">↺ Re-Routed</span>
+                    {% else %}
+                    <span style="background:rgba(17,153,142,0.1);color:#11998e;padding:0.15rem 0.6rem;border-radius:8px;font-size:0.78rem;font-weight:700">✓ Same Path</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% endif %}
+
+  {% endif %}
+{% else %}
+    <div class="section-card">
+        <div style="color:#e74c3c;font-size:1.1rem;font-weight:600;padding:2rem;background:rgba(231,76,60,0.08);border-radius:14px;border-left:5px solid #e74c3c">
+            🚫 No result available. Make sure source and destination routers exist in the topology.
+        </div>
+    </div>
+{% endif %}
+
+<div style="text-align:center;display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+    <a href="/" class="btn">← Back to Dashboard</a>
+    {% if result.src_ip and result.dst_ip %}
+    <a href="/packet_analyzer?src={{ result.src_ip }}&dst={{ result.dst_ip }}&autostart=1{% if congestion_active %}&congestion=1{% endif %}" class="btn" style="background:linear-gradient(135deg,#2c3e50,#34495e)">🔬 Capture Traffic on This Path →</a>
+    {% else %}
+    <a href="/packet_analyzer" class="btn" style="background:linear-gradient(135deg,#2c3e50,#34495e)">🔬 Capture Traffic on This Path →</a>
+    {% endif %}
+</div>
+</div>
+<script>
+function switchView(id, btn) {
+    document.querySelectorAll('.view-panel').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('view-'+id).classList.add('active');
+    btn.classList.add('active');
+}
+</script>
+</body>
+</html>

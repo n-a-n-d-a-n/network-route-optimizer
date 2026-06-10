@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congestion-Aware Route Optimizer — G10</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height:1.6; color:#333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height:100vh; padding:2rem 1rem;
+        }
+        .container { background:rgba(255,255,255,0.95); border-radius:24px; padding:3rem; box-shadow:0 25px 50px rgba(0,0,0,0.15); max-width:1100px; margin:0 auto; }
+        h1 { color:#2c3e50; font-size:2rem; font-weight:700; text-align:center; margin-bottom:0.5rem; }
+        .subtitle { text-align:center; color:#666; margin-bottom:2rem; }
+        /* ERROR */
+        .error-banner { background:rgba(231,76,60,0.08); border-left:5px solid #e74c3c; border-radius:0 14px 14px 0; padding:1.5rem 2rem; margin-bottom:2rem; }
+        .error-banner h2 { color:#e74c3c; margin-bottom:0.5rem; font-size:1.1rem; }
+        .error-banner p { color:#555; font-size:0.95rem; }
+        /* OPTIMAL BANNER */
+        .optimal-banner { background:linear-gradient(135deg,#11998e,#38ef7d); border-radius:16px; padding:1.75rem 2rem; margin-bottom:2rem; color:white; box-shadow:0 10px 30px rgba(17,153,142,0.3); }
+        .optimal-banner h2 { font-size:1.2rem; margin-bottom:0.75rem; opacity:0.9; }
+        .opt-path { font-family:'Courier New',monospace; font-size:0.95rem; font-weight:700; word-break:break-all; margin-bottom:1rem; }
+        .ip-node { display:inline-block; background:rgba(255,255,255,0.25); padding:0.2rem 0.55rem; border-radius:6px; margin:0.15rem; font-size:0.85rem; }
+        .opt-stats { display:flex; gap:1.5rem; flex-wrap:wrap; }
+        .ostat { background:rgba(255,255,255,0.2); padding:0.6rem 1rem; border-radius:10px; }
+        .ostat-label { font-size:0.75rem; opacity:0.85; display:block; }
+        .ostat-val { font-size:1.1rem; font-weight:700; }
+        /* PATH SUMMARY STRIP */
+        .path-summary { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+        .path-chip { padding:0.35rem 0.9rem; border-radius:20px; background:rgba(102,126,234,0.1); border:1px solid rgba(102,126,234,0.2); color:#667eea; font-size:0.82rem; font-weight:600; }
+        /* SECTION CARD */
+        .section-card { background:white; border-radius:16px; padding:2rem; margin-bottom:1.5rem; box-shadow:0 8px 25px rgba(0,0,0,0.08); }
+        .section-card h2 { color:#2c3e50; margin-bottom:1.25rem; font-size:1.2rem; }
+        /* TRACEROUTE TABLE — now with hop type column and colour coding */
+        .trace-table { width:100%; border-collapse:collapse; border-radius:12px; overflow:hidden; font-size:0.87rem; }
+        .trace-table thead tr { background:linear-gradient(135deg,#2c3e50,#34495e); color:white; }
+        .trace-table th { padding:0.875rem 0.75rem; text-align:left; font-weight:600; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.4px; }
+        .trace-table td { padding:0.8rem 0.75rem; border-bottom:1px solid #f0f0f0; }
+        .trace-table tr:last-child td { border-bottom:none; }
+        .trace-table tr:hover td { background:#fafafe; }
+        .trace-table tr.hop-src td { background:rgba(231,76,60,0.05); }
+        .trace-table tr.hop-dst td { background:rgba(17,153,142,0.05); }
+        .hop-num { font-weight:700; color:#667eea; width:40px; }
+        .ip-mono { font-family:'Courier New',monospace; font-weight:600; color:#2c3e50; }
+        .rtt-val { font-weight:700; color:#e74c3c; }
+        .asn-chip { display:inline-block; padding:0.15rem 0.5rem; border-radius:8px; background:rgba(102,126,234,0.1); color:#667eea; font-size:0.75rem; font-weight:600; }
+        .isp-chip { display:inline-block; padding:0.12rem 0.45rem; border-radius:8px; background:rgba(17,153,142,0.1); color:#11998e; font-size:0.73rem; font-weight:600; margin-left:0.3rem; }
+        .hop-role { font-size:0.72rem; padding:0.1rem 0.5rem; border-radius:8px; font-weight:700; }
+        .hop-role-src { background:rgba(231,76,60,0.15); color:#e74c3c; }
+        .hop-role-dst { background:rgba(17,153,142,0.15); color:#11998e; }
+        .hop-role-isp { background:rgba(102,126,234,0.12); color:#667eea; }
+        .hop-role-bb  { background:rgba(142,68,173,0.12); color:#8e44ad; }
+        /* ALGO CARDS */
+        .tabs { display:flex; gap:0.5rem; margin-bottom:1.5rem; border-bottom:2px solid #f0f0f0; padding-bottom:0.5rem; }
+        .tab-btn { padding:0.5rem 1.1rem; border:none; background:none; cursor:pointer; font-size:0.88rem; color:#888; border-radius:8px 8px 0 0; font-weight:600; transition:0.2s; }
+        .tab-btn.active { color:#667eea; background:rgba(102,126,234,0.08); }
+        .view-panel { display:none; }
+        .view-panel.active { display:block; }
+        .algo-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1rem; }
+        .algo-card { padding:1.25rem 1.5rem; border-radius:14px; border:2px solid #e1e5e9; transition:0.2s; position:relative; }
+        .algo-card:hover { border-color:#667eea; }
+        .algo-card.is-optimal { border-color:#11998e; background:rgba(17,153,142,0.04); }
+        .algo-card-name { font-weight:700; color:#2c3e50; font-size:0.95rem; margin-bottom:0.3rem; }
+        .algo-card-desc { font-size:0.78rem; color:#777; margin-bottom:0.7rem; line-height:1.5; }
+        .algo-card-path { font-family:'Courier New',monospace; font-size:0.75rem; color:#555; background:#f8f9fa; padding:0.5rem 0.7rem; border-radius:8px; margin-bottom:0.6rem; word-break:break-all; }
+        .algo-card-meta { display:flex; gap:0.6rem; flex-wrap:wrap; }
+        .meta-chip { font-size:0.75rem; font-weight:600; padding:0.18rem 0.5rem; border-radius:8px; }
+        .meta-cost { background:rgba(231,76,60,0.1); color:#e74c3c; }
+        .meta-time { background:rgba(52,152,219,0.1); color:#2980b9; }
+        .meta-hops { background:rgba(142,68,173,0.1); color:#8e44ad; }
+        .optimal-badge { position:absolute; top:0.75rem; right:0.75rem; background:linear-gradient(135deg,#11998e,#38ef7d); color:white; padding:0.2rem 0.6rem; border-radius:10px; font-size:0.72rem; font-weight:700; }
+        .no-path { color:#e74c3c; font-style:italic; font-size:0.82rem; }
+        table.cmp-table { width:100%; border-collapse:collapse; font-size:0.87rem; }
+        .cmp-table thead tr { background:linear-gradient(135deg,#2c3e50,#34495e); color:white; }
+        .cmp-table th { padding:0.875rem 0.75rem; text-align:left; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.4px; font-weight:600; }
+        .cmp-table td { padding:0.8rem 0.75rem; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+        .cmp-table tr:last-child td { border-bottom:none; }
+        .cmp-table tr.opt-row td { background:rgba(17,153,142,0.05); }
+        .cmp-table tr.opt-row td:first-child { border-left:4px solid #11998e; }
+        .path-cell { font-family:'Courier New',monospace; font-size:0.78rem; word-break:break-all; }
+        .tag { display:inline-block; padding:0.1rem 0.45rem; border-radius:8px; font-size:0.7rem; font-weight:600; margin-left:0.3rem; }
+        .tag-best { background:rgba(17,153,142,0.15); color:#11998e; }
+        .info-note { background:rgba(102,126,234,0.06); border-left:3px solid #667eea; border-radius:0 8px 8px 0; padding:0.75rem 1rem; font-size:0.82rem; color:#555; margin-bottom:1rem; }
+        .btn { display:inline-flex; align-items:center; gap:0.5rem; background:linear-gradient(135deg,#11998e,#38ef7d); color:white; padding:0.875rem 2rem; border-radius:12px; text-decoration:none; font-weight:600; font-size:1rem; transition:0.3s; margin-top:2rem; }
+        .btn:hover { transform:translateY(-2px); box-shadow:0 10px 25px rgba(17,153,142,0.4); }
+        @media(max-width:600px){ .container{padding:1.5rem;} }
+    </style>
+</head>
+<body>
+<div class="container">
+
+{% if result %}
+  {% if result.error %}
+    <h1>🌍 IP Route Discovery</h1>
+    <div class="error-banner">
+        <h2>🚫 Invalid Input</h2>
+        <p>{{ result.error }}</p>
+        <p style="margin-top:0.5rem;font-size:0.85rem;color:#888">
+            Source: <strong>{{ result.source }}</strong> → Destination: <strong>{{ result.destination }}</strong>
+        </p>
+    </div>
+  {% else %}
+    <h1>🌍 Real IP Route Discovery</h1>
+    <p class="subtitle">{{ result.source }} → {{ result.destination }}</p>
+
+    {% if result.hop_count or result.total_rtt %}
+    <div class="path-summary">
+        <span class="path-chip">{{ result.hop_count }} hops discovered</span>
+        <span class="path-chip">{{ result.total_rtt }} ms end-to-end RTT</span>
+        <span class="path-chip">{{ result.results|length }} algorithms run</span>
+    </div>
+    {% endif %}
+
+    <!-- ── ROUTING NECESSITY & SUBNET PANEL ── Ch3 ── -->
+    {% if routing_info %}
+    <div style="border-radius:14px;padding:1.1rem 1.5rem;margin-bottom:1.5rem;{% if routing_info.nat_boundary %}background:rgba(243,156,18,0.07);border-left:4px solid #f39c12{% elif not routing_info.needs_routing %}background:rgba(17,153,142,0.07);border-left:4px solid #11998e{% else %}background:rgba(102,126,234,0.07);border-left:4px solid #667eea{% endif %}">
+        <div style="font-weight:700;font-size:0.95rem;color:#2c3e50;margin-bottom:0.3rem">
+            {% if not routing_info.needs_routing %}✅ No Routing Required{% elif routing_info.nat_boundary %}⚠ NAT Boundary Detected{% else %}🔀 Routing Required{% endif %}
+        </div>
+        <p style="font-size:0.85rem;color:#555">{{ routing_info.reason }}</p>
+        {% if routing_info.nat_explanation %}
+        <p style="font-size:0.82rem;color:#888;margin-top:0.3rem">{{ routing_info.nat_explanation }}</p>
+        {% endif %}
+        <p style="font-size:0.72rem;color:#aaa;margin-top:0.25rem"><em>{{ routing_info.syllabus_note }}</em></p>
+    </div>
+    {% endif %}
+
+    <!-- IP Address Info Strip -->
+    {% if src_info and dst_info and not src_info.error %}
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem">
+        {% for label, info in [('Source', src_info), ('Destination', dst_info)] %}
+        {% if not info.error %}
+        <div style="flex:1;min-width:220px;background:white;border-radius:12px;padding:1rem 1.25rem;box-shadow:0 4px 14px rgba(0,0,0,0.07);border:1px solid #f0f0f0">
+            <div style="font-size:0.7rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:0.4rem">{{ label }} IP</div>
+            <div style="font-family:'Courier New',monospace;font-weight:700;color:#2c3e50;font-size:1rem">{{ info.ip }}</div>
+            <div style="margin-top:0.4rem;display:flex;gap:0.4rem;flex-wrap:wrap">
+                <span style="background:rgba(102,126,234,0.1);color:#667eea;padding:0.1rem 0.5rem;border-radius:6px;font-size:0.72rem;font-weight:700">Class {{ info.ip_class }}</span>
+                <span style="background:{% if info.addr_type == 'Private' %}rgba(243,156,18,0.12){% elif info.addr_type == 'Public' %}rgba(17,153,142,0.12){% else %}rgba(52,152,219,0.12){% endif %};color:{% if info.addr_type == 'Private' %}#d4830a{% elif info.addr_type == 'Public' %}#11998e{% else %}#2980b9{% endif %};padding:0.1rem 0.5rem;border-radius:6px;font-size:0.72rem;font-weight:700">{{ info.addr_type }}</span>
+            </div>
+            <div style="font-size:0.72rem;color:#999;margin-top:0.3rem;font-family:'Courier New',monospace">{{ info.binary_ip }}</div>
+            <div style="font-size:0.7rem;color:#aaa;margin-top:0.2rem">📚 Ch3: {{ info.ip_class }} — {{ info.class_range }}</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- NAT Translation Table -->
+    {% if nat_table %}
+    <div style="background:white;border-radius:14px;padding:1.25rem 1.5rem;box-shadow:0 4px 14px rgba(0,0,0,0.07);margin-bottom:1.5rem;border:1px solid rgba(243,156,18,0.2)">
+        <h3 style="color:#2c3e50;font-size:1rem;font-weight:700;margin-bottom:0.75rem">🔄 NAT Translation Table <span style="font-size:0.72rem;color:#aaa;font-weight:400;margin-left:0.5rem">📚 Ch3 — Network Address Translation</span></h3>
+        {% for entry in nat_table %}
+        <div style="background:rgba(243,156,18,0.06);border-radius:10px;padding:0.75rem 1rem;border:1px solid rgba(243,156,18,0.2)">
+            <div style="font-family:'Courier New',monospace;font-weight:700;font-size:0.95rem;color:#2c3e50">{{ entry.translation }}</div>
+            <div style="font-size:0.8rem;color:#666;margin-top:0.2rem">At hop {{ entry.hop_num }} ({{ entry.org }}) — {{ entry.type }}</div>
+            <div style="font-size:0.78rem;color:#888;margin-top:0.2rem">{{ entry.explanation }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ADD after nat_table section -->
+{% if result.real_ping and result.real_ping.reachable %}
+<div style="background:white;border-radius:14px;padding:1.25rem 1.5rem;
+            box-shadow:0 4px 14px rgba(0,0,0,0.07);margin-bottom:1.5rem;
+            border-left:3px solid #11998e">
+    <h3 style="color:#2c3e50;font-size:0.95rem;font-weight:700;margin-bottom:0.75rem">
+        📡 Real ICMP Ping Results — Live Measurement
+        <span style="font-size:0.7rem;color:#aaa;font-weight:400;margin-left:0.5rem">
+            📚 Ch3: ICMP — Network Layer Control Protocol
+        </span>
+    </h3>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:100px;padding:0.75rem;background:#f8fff8;
+                    border-radius:10px;border:1px solid rgba(17,153,142,0.2);text-align:center">
+            <div style="font-size:0.68rem;color:#888;font-weight:600;text-transform:uppercase">Min RTT</div>
+            <div style="font-size:1.2rem;font-weight:800;color:#11998e">
+                {{ result.real_ping.rtt_min }} ms
+            </div>
+        </div>
+        <div style="flex:1;min-width:100px;padding:0.75rem;background:#f8fff8;
+                    border-radius:10px;border:1px solid rgba(17,153,142,0.2);text-align:center">
+            <div style="font-size:0.68rem;color:#888;font-weight:600;text-transform:uppercase">Avg RTT</div>
+            <div style="font-size:1.2rem;font-weight:800;color:#11998e">
+                {{ result.real_ping.rtt_avg }} ms
+            </div>
+        </div>
+        <div style="flex:1;min-width:100px;padding:0.75rem;background:#f8fff8;
+                    border-radius:10px;border:1px solid rgba(17,153,142,0.2);text-align:center">
+            <div style="font-size:0.68rem;color:#888;font-weight:600;text-transform:uppercase">Max RTT</div>
+            <div style="font-size:1.2rem;font-weight:800;color:#11998e">
+                {{ result.real_ping.rtt_max }} ms
+            </div>
+        </div>
+        <div style="flex:1;min-width:100px;padding:0.75rem;
+                    background:{% if result.real_ping.packet_loss_pct > 0 %}
+                    rgba(231,76,60,0.05){% else %}#f8fff8{% endif %};
+                    border-radius:10px;border:1px solid rgba(17,153,142,0.2);text-align:center">
+            <div style="font-size:0.68rem;color:#888;font-weight:600;text-transform:uppercase">Packet Loss</div>
+            <div style="font-size:1.2rem;font-weight:800;
+                        color:{% if result.real_ping.packet_loss_pct > 0 %}#e74c3c{% else %}#11998e{% endif %}">
+                {{ result.real_ping.packet_loss_pct }}%
+            </div>
+        </div>
+        <div style="flex:1;min-width:100px;padding:0.75rem;background:#f8fff8;
+                    border-radius:10px;border:1px solid rgba(17,153,142,0.2);text-align:center">
+            <div style="font-size:0.68rem;color:#888;font-weight:600;text-transform:uppercase">Real TTL</div>
+            <div style="font-size:1.2rem;font-weight:800;color:#667eea">
+                {{ result.real_ping.real_ttl }}
+            </div>
+        </div>
+    </div>
+    <p style="font-size:0.72rem;color:#aaa;margin-top:0.6rem">
+        ✅ Live measurement — these are real values from actual ICMP packets sent to {{ result.destination }}
+    </p>
+</div>
+{% endif %}
+
+    <!-- RIP Warning -->
+    {% if rip_warn and rip_warn.warning %}
+    <div style="background:rgba(231,76,60,0.07);border-left:4px solid #e74c3c;border-radius:0 12px 12px 0;padding:1rem 1.25rem;margin-bottom:1.5rem">
+        <strong style="color:#e74c3c">{{ rip_warn.message }}</strong>
+        <p style="font-size:0.82rem;color:#666;margin-top:0.4rem">{{ rip_warn.detail }}</p>
+        <p style="font-size:0.72rem;color:#aaa;margin-top:0.2rem"><em>{{ rip_warn.syllabus }}</em></p>
+    </div>
+    {% endif %}
+
+    <!-- Gap 6 — Potential Congestion Warning from RTT analysis -->
+    {% if ip_congestion_warning %}
+    <div style="background:rgba(231,76,60,0.09);border-left:5px solid #e74c3c;border-radius:0 14px 14px 0;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:0.75rem">
+        <span style="font-size:1.3rem">🔴</span>
+        <div>
+            <strong style="color:#c0392b;font-size:0.95rem">⚠ Potential congestion detected on this path</strong>
+            <p style="font-size:0.82rem;color:#666;margin-top:0.2rem">{{ ip_congestion_warning }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Gap 7 — Algorithm Recommendation for IP route -->
+    {% if ip_algo_rec %}
+    <div style="background:rgba(17,153,142,0.08);border-left:5px solid #11998e;border-radius:0 14px 14px 0;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:0.75rem">
+        <span style="font-size:1.3rem">🧠</span>
+        <div>
+            <strong style="color:#0a7a5e;font-size:0.95rem">Recommended Algorithm: {{ ip_algo_rec.algo }}</strong>
+            <p style="font-size:0.82rem;color:#555;margin-top:0.2rem">{{ ip_algo_rec.reason }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if result.optimal %}
+    <div class="optimal-banner">
+        {% if result.tied_count and result.tied_count > 1 %}
+        <h2>🏆 Optimal Path — {{ result.tied_count }} Algorithms Tied at Cost {{ result.optimal.cost }}</h2>
+        {% else %}
+        <h2>🏆 Optimal Path — {{ result.optimal.name }}</h2>
+        {% endif %}
+        <div class="opt-path">
+            {% for ip in result.optimal.path %}
+                <span class="ip-node">{{ ip }}</span>{% if not loop.last %} → {% endif %}
+            {% endfor %}
+        </div>
+        {% if result.tied_count and result.tied_count > 1 %}
+        <div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+            <span style="font-size:0.75rem;opacity:0.75;margin-right:0.25rem">All optimal algorithms:</span>
+            {% for name in result.tied_names %}
+            <span style="background:rgba(255,255,255,0.25);padding:0.18rem 0.6rem;border-radius:8px;font-size:0.78rem;font-weight:700">{{ name }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="opt-stats">
+            <div class="ostat"><span class="ostat-label">Total Cost</span><span class="ostat-val">{{ result.optimal.cost }}</span></div>
+            <div class="ostat"><span class="ostat-label">Hops</span><span class="ostat-val">{{ result.optimal.hops }}</span></div>
+            <div class="ostat"><span class="ostat-label">Exec Time</span><span class="ostat-val">{{ result.optimal.time_ms }} ms</span></div>
+            <div class="ostat"><span class="ostat-label">Complexity</span><span class="ostat-val" style="font-size:0.88rem">{{ result.optimal.complexity }}</span></div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TRACEROUTE HOPS — Enhanced with ISP, role, colour coding -->
+    <div class="section-card">
+        <h2>🛤 Simulated Network Path (ISP-Grade Traceroute Model)</h2>
+        <p class="info-note">Hops are algorithmically simulated using realistic ISP topology models (Jio / Airtel / BSNL backbone profiles). RTT, ASN, and country data shown below are enriched with <strong>live ipinfo.io lookups</strong> where available — ping results are also real. The hop path itself is a deterministic simulation.</p>
+        <table class="trace-table">
+            <thead><tr>
+                <th>#</th><th>IP Address</th><th>Hostname / Organisation</th>
+                <th>RTT (ms)</th><th>ASN</th><th>ISP / Network</th><th>Country</th><th>Role</th><th>City</th>
+            </tr></thead>
+            <tbody>
+            {% for h in result.hops %}
+            <tr class="{% if loop.first %}hop-src{% elif loop.last %}hop-dst{% endif %}">
+                <td class="hop-num">{{ h.hop_num }}</td>
+                <td class="ip-mono">{{ h.ip }}</td>
+                <td style="font-size:0.82rem;color:#555;max-width:200px">
+                    <div style="font-weight:600">{{ h.hostname if h.hostname != h.ip else h.org }}</div>
+                    {% if h.hostname != h.ip and h.hostname != h.org %}
+                    <div style="color:#aaa;font-size:0.75rem">{{ h.org }}</div>
+                    {% endif %}
+                </td>
+                <td class="rtt-val">{{ h.rtt_ms }}</td>
+                <td><span class="asn-chip">{{ h.asn }}</span></td>
+                <td style="font-size:0.8rem">
+                    {{ h.isp if h.isp else h.org }}
+                </td>
+                <td style="font-size:0.85rem">{{ h.country }}</td>
+                <td>
+                    {% if loop.first %}
+                        <span class="hop-role hop-role-src">Source</span>
+                    {% elif loop.last %}
+                        <span class="hop-role hop-role-dst">Destination</span>
+                    {% elif h.asn and h.asn.startswith('AS') and ('NTT' in h.org or 'TATA' in h.org or 'NIXI' in h.org) %}
+                        <span class="hop-role hop-role-bb">Backbone</span>
+                    {% else %}
+                        <span class="hop-role hop-role-isp">ISP Core</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:0.82rem">{{ h.city if h.city else '—' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── PROTOCOL MAP ── Ch4 ── -->
+    {% if protocol_map %}
+    <div style="background:white;border-radius:14px;padding:1.25rem 1.5rem;box-shadow:0 4px 14px rgba(0,0,0,0.07);margin-bottom:1.5rem">
+        <h3 style="color:#2c3e50;font-size:0.95rem;font-weight:700;margin-bottom:0.75rem">📚 Ch4 — Algorithm → Protocol Mapping</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+        {% for pm in protocol_map %}
+        <div style="flex:1;min-width:180px;padding:0.65rem 0.85rem;border-radius:10px;border:1px solid #f0f0f0;background:#fafafa">
+            <div style="font-size:0.78rem;font-weight:700;color:#2c3e50">{{ pm.algo }}</div>
+            <div style="font-size:0.72rem;color:#667eea;margin-top:0.1rem">{{ pm.protocol }}</div>
+            <div style="font-size:0.7rem;color:#aaa;margin-top:0.1rem">{{ pm.syllabus }}</div>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ALGORITHM VIEWS -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="sv('cards',this)">🃏 Algorithm Cards</button>
+        <button class="tab-btn" onclick="sv('table',this)">📊 Comparison Table</button>
+    </div>
+
+    <div id="view-cards" class="view-panel active">
+        <div class="algo-cards">
+        {% for r in result.results %}
+            <div class="algo-card {% if result.tied_names and r.name in result.tied_names %}is-optimal{% endif %}">
+                {% if result.tied_names and r.name in result.tied_names %}
+                <span class="optimal-badge">{% if result.tied_count > 1 %}✓ TIED OPTIMAL{% else %}✓ OPTIMAL{% endif %}</span>
+                {% endif %}
+                <div class="algo-card-name">{{ r.name }}</div>
+                <div class="algo-card-desc">{{ r.description }}</div>
+                {% if r.path %}
+                    <div class="algo-card-path">{{ r.path | join(' → ') }}</div>
+                    <div class="algo-card-meta">
+                        <span class="meta-chip meta-cost">Cost: {{ r.cost }}</span>
+                        <span class="meta-chip meta-time">{{ r.time_ms }} ms</span>
+                        <span class="meta-chip meta-hops">{{ r.hops }} hops</span>
+                    </div>
+                    {% if r.notes %}<p style="font-size:0.74rem;color:#888;margin-top:0.5rem">{{ r.notes }}</p>{% endif %}
+                {% else %}
+                    <div class="no-path">⚠ No valid path found</div>
+                    {% if r.notes %}<p style="font-size:0.74rem;color:#aaa;margin-top:0.3rem">{{ r.notes }}</p>{% endif %}
+                {% endif %}
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+
+    <div id="view-table" class="view-panel">
+        <div class="section-card">
+            {% set mc = namespace(v=999999) %}{% set mt = namespace(v=999999) %}
+            {% for r in result.results %}{% if r.path and r.cost < mc.v %}{% set mc.v = r.cost %}{% endif %}{% if r.time_ms < mt.v %}{% set mt.v = r.time_ms %}{% endif %}{% endfor %}
+            <table class="cmp-table">
+                <thead><tr>
+                    <th>Algorithm</th><th>Path (IPs)</th><th>Cost</th><th>Time (ms)</th><th>Hops</th><th>Complexity</th>
+                </tr></thead>
+                <tbody>
+                {% for r in result.results %}
+                <tr {% if result.optimal and r.name == result.optimal.name %}class="opt-row"{% endif %}>
+                    <td><strong>{{ r.name }}</strong>
+                        {% if result.tied_names and r.name in result.tied_names %}<span class="tag tag-best">{% if result.tied_count > 1 %}TIED BEST{% else %}BEST{% endif %}</span>{% endif %}
+                    </td>
+                    <td class="path-cell">{% if r.path %}{{ r.path|join(' → ') }}{% else %}<em style="color:#bbb">no path</em>{% endif %}</td>
+                    <td style="font-weight:700;color:#e74c3c">
+                        {% if r.path %}{{ r.cost }}{% if r.cost == mc.v %}<span class="tag tag-best">↓</span>{% endif %}{% else %}∞{% endif %}
+                    </td>
+                    <td style="font-weight:700;color:#3498db">{{ r.time_ms }}{% if r.time_ms == mt.v %}<span class="tag" style="background:rgba(52,152,219,0.15);color:#2980b9">↓</span>{% endif %}</td>
+                    <td style="font-weight:600;color:#8e44ad">{{ r.hops }}</td>
+                    <td style="font-family:monospace;font-size:0.78rem;color:#666">{{ r.complexity }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+  {% endif %}
+{% else %}
+    <div class="section-card">
+        <div style="color:#e74c3c;font-size:1.1rem;font-weight:600;padding:2rem;background:rgba(231,76,60,0.08);border-radius:14px;border-left:5px solid #e74c3c">
+            🚫 Could not discover route. Please check your IP addresses.
+        </div>
+    </div>
+{% endif %}
+
+<div style="text-align:center;display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+    <a href="/" class="btn">← Back to Dashboard</a>
+    <a href="/packet_analyzer" class="btn" style="background:linear-gradient(135deg,#2c3e50,#34495e)">🔬 Capture &amp; Diagnose Traffic →</a>
+</div>
+</div>
+<script>
+function sv(id, btn) {
+    document.querySelectorAll('.view-panel').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('view-'+id).classList.add('active'); btn.classList.add('active');
+}
+</script>
+</body>
+</html>

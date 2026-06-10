@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congestion-Aware Route Optimizer — G10</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6; color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 2rem;
+        }
+        .container { background: rgba(255,255,255,0.95); border-radius: 20px; padding: 3rem; box-shadow: 0 20px 40px rgba(0,0,0,0.1); max-width: 900px; margin: 0 auto; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 0.5rem; font-size: 2.5rem; font-weight: 700; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 1rem; font-size: 1rem; }
+        .nav-pills { display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 2.5rem; flex-wrap: wrap; }
+        .nav-pill { padding: 0.5rem 1.25rem; border-radius: 50px; background: #f0f0f0; color: #555; text-decoration: none; font-size: 0.9rem; font-weight: 600; transition: all 0.2s; border: none; cursor: pointer; }
+        .nav-pill:hover, .nav-pill.active { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .form-section { margin-bottom: 2rem; padding: 2rem; background: white; border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.06); }
+        .form-section h2 { color: #2c3e50; margin-bottom: 1.5rem; font-size: 1.3rem; display: flex; align-items: center; gap: 0.5rem; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem; }
+        .form-group { display: flex; flex-direction: column; }
+        label { font-weight: 600; color: #555; margin-bottom: 0.4rem; font-size: 0.9rem; }
+        input[type="text"], input[type="number"] {
+            padding: 0.75rem 1rem; border: 2px solid #e1e5e9; border-radius: 10px;
+            font-size: 0.95rem; transition: all 0.3s; background: #f8f9fa;
+        }
+        input:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+        input.input-error { border-color: #e74c3c !important; background: #fff5f5; }
+        input.input-warn  { border-color: #f39c12 !important; background: #fffbf0; }
+        input.input-ok    { border-color: #11998e !important; }
+        .ip-feedback { font-size: 0.78rem; margin-top: 0.3rem; min-height: 1.1rem; line-height: 1.3; padding: 0.25rem 0.4rem; border-radius: 6px; display: none; }
+        .ip-feedback.show { display: block; }
+        .ip-feedback.warn  { color: #b7620a; background: #fff3cd; border: 1px solid #ffc107; }
+        .ip-feedback.error { color: #c0392b; background: #fdecea; border: 1px solid #e74c3c; }
+        .ip-feedback.ok    { color: #0a7a5e; background: #e8f8f0; border: 1px solid #11998e; }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; padding: 0.875rem 2rem;
+            border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer;
+            transition: all 0.3s; display: inline-flex; align-items: center; gap: 0.5rem;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.4); }
+        .btn-full { width: 100%; justify-content: center; }
+        .btn-green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .btn-green:hover { box-shadow: 0 10px 25px rgba(17,153,142,0.4); }
+        .btn-red { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); }
+        .btn-sm { padding: 0.6rem 1.2rem; font-size: 0.9rem; }
+        .algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.5rem; margin: 0.75rem 0 1.25rem; }
+        .algo-label {
+            display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.9rem;
+            border: 2px solid #e1e5e9; border-radius: 10px; cursor: pointer;
+            transition: all 0.2s; font-size: 0.85rem; font-weight: 500; color: #444;
+        }
+        .algo-label:hover { border-color: #667eea; color: #667eea; background: rgba(102,126,234,0.04); }
+        .algo-label input { accent-color: #667eea; width: 15px; height: 15px; }
+        .algo-note { font-size: 0.82rem; color: #888; margin-bottom: 0.75rem; }
+        .ip-pair-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: start; margin-bottom: 1.25rem; }
+        .ip-arrow { font-size: 1.5rem; padding-top: 2rem; color: #667eea; }
+        .router-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+        .router-tag { padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(102,126,234,0.1); border: 1px solid rgba(102,126,234,0.3); color: #667eea; font-size: 0.82rem; font-family: monospace; }
+        .quick-fill { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+        .quick-btn { padding: 0.35rem 0.85rem; border-radius: 20px; border: 1px solid #e1e5e9; background: white; font-size: 0.8rem; color: #666; cursor: pointer; transition: 0.2s; }
+        .quick-btn:hover { border-color: #667eea; color: #667eea; }
+        hr { border: none; height: 2px; background: linear-gradient(90deg, transparent, #e1e5e9, transparent); margin: 2rem 0; }
+        .action-links { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-top: 2rem; }
+        .action-links a { flex: 1; min-width: 180px; text-align: center; justify-content: center; }
+        .net-summary { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+        .net-badge { padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(17,153,142,0.1); border: 1px solid rgba(17,153,142,0.3); color: #11998e; font-size: 0.8rem; font-weight: 600; }
+        .info-note { background: rgba(102,126,234,0.06); border-left: 3px solid #667eea; border-radius: 0 8px 8px 0; padding: 0.75rem 1rem; font-size: 0.85rem; color: #555; margin-bottom: 1rem; }
+        @media(max-width:600px){ body{padding:1rem;} .container{padding:1.5rem;} .ip-pair-grid{grid-template-columns:1fr;} .ip-arrow{display:none;} }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🛡️ Congestion-Aware Route Optimizer</h1>
+    <p class="subtitle">Detect Congestion · Re-Route Intelligently · Compare Algorithms Under Real Network Stress</p>
+
+    <!-- PROBLEM / SOLUTION STATEMENT -->
+    <div style="background:linear-gradient(135deg,#2c3e50,#34495e);border-radius:16px;padding:1.2rem 1.75rem;margin-bottom:1.75rem;color:white;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">
+        <div style="flex:1;min-width:180px">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;opacity:0.6;margin-bottom:0.2rem">🎯 Problem</div>
+            <div style="font-size:0.87rem;font-weight:600">When congestion strikes a network link, most routers keep sending traffic down the same congested path — unaware that a better route exists.</div>
+        </div>
+        <div style="width:1px;background:rgba(255,255,255,0.15);align-self:stretch"></div>
+        <div style="flex:1;min-width:180px">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;opacity:0.6;margin-bottom:0.2rem">💡 Our Solution — Congestion-Aware Routing</div>
+            <div style="font-size:0.87rem;font-weight:600">Apply congestion to any link and watch 10 routing algorithms instantly re-route around it — with cost comparisons, before/after analysis, and live diagnostics.</div>
+        </div>
+        <div style="width:1px;background:rgba(255,255,255,0.15);align-self:stretch"></div>
+        <div style="flex:1;min-width:180px">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;opacity:0.6;margin-bottom:0.2rem">🛠 Demo Flow</div>
+            <div style="font-size:0.87rem;font-weight:600">1. Build topology &amp; compute route &nbsp;→&nbsp; 2. Apply congestion &nbsp;→&nbsp; 3. Re-compute &amp; see congestion-aware re-routing</div>
+        </div>
+    </div>
+
+    <div class="nav-pills">
+        <button class="nav-pill active" onclick="showTab('topology',this)">🔧 Custom Topology</button>
+        <button class="nav-pill" onclick="showTab('ip',this)">🌍 Real IP Route</button>
+        <a href="/routing_tables" class="nav-pill">📋 Routing Tables</a>
+        <a href="/health_report" class="nav-pill">🩺 Health Report</a>
+        <a href="/packet_analyzer" class="nav-pill">🔬 Packet Analyzer</a>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          {% if category == "warning" %}
+          <div style="background:rgba(230,126,34,0.1);border-left:4px solid #e67e22;border-radius:0 12px 12px 0;padding:0.9rem 1.25rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.75rem">
+              <span style="font-size:1.1rem">⚠️</span>
+              <span style="font-weight:600;color:#a04000;font-size:0.92rem">{{ message }}</span>
+          </div>
+          {% elif category == "danger" %}
+          <div style="background:rgba(231,76,60,0.1);border-left:4px solid #e74c3c;border-radius:0 12px 12px 0;padding:0.9rem 1.25rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.75rem">
+              <span style="font-size:1.1rem">❌</span>
+              <span style="font-weight:600;color:#c0392b;font-size:0.92rem">{{ message }}</span>
+          </div>
+          {% else %}
+          <div style="background:rgba(17,153,142,0.1);border-left:4px solid #11998e;border-radius:0 12px 12px 0;padding:0.9rem 1.25rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.75rem">
+              <span style="font-size:1.1rem">✅</span>
+              <span style="font-weight:600;color:#0a7a5e;font-size:0.92rem">{{ message }}</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Gap 1 — Congestion Status Panel -->
+    {% if routers %}
+    <div style="margin-bottom:1.5rem">
+      {% if congestion_report %}
+      <div style="background:rgba(231,76,60,0.07);border:1.5px solid rgba(231,76,60,0.3);border-radius:14px;padding:1rem 1.25rem">
+          <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.75rem">
+              <span style="font-size:1.1rem">🔴</span>
+              <strong style="color:#c0392b;font-size:0.95rem">Congestion Active — {{ congestion_report|length }} link(s) affected</strong>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+          {% for link in congestion_report %}
+              <span style="background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.3);color:#c0392b;padding:0.3rem 0.8rem;border-radius:20px;font-size:0.8rem;font-family:monospace;font-weight:600">
+                  {{ link.src }} → {{ link.dst }} &nbsp;|&nbsp; +{{ link.congestion }} ms &nbsp;|&nbsp; {{ link.bandwidth }} Mbps
+              </span>
+          {% endfor %}
+          </div>
+      </div>
+      {% else %}
+      <div style="background:rgba(17,153,142,0.07);border:1.5px solid rgba(17,153,142,0.25);border-radius:14px;padding:0.9rem 1.25rem;display:flex;align-items:center;gap:0.6rem">
+          <span style="font-size:1.1rem">🟢</span>
+          <strong style="color:#0a7a5e;font-size:0.9rem">All links healthy — no congestion detected on any link in the topology.</strong>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- ── TOPOLOGY TAB ── -->
+    <div id="tab-topology" class="tab-panel active">
+
+        <section class="form-section">
+            <h2>➕ Add Network Link</h2>
+            <p class="info-note">📌 Build your topology by adding router links. Each link is bidirectional. Example: <strong>R1 → R2</strong> (delay: 5ms, bandwidth: 100Mbps)</p>
+            <form action="/add_link" method="post">
+                <div class="form-grid">
+                    <div class="form-group"><label>Source Router</label><input type="text" name="source" placeholder="e.g. R1" required></div>
+                    <div class="form-group"><label>Destination Router</label><input type="text" name="destination" placeholder="e.g. R2" required></div>
+                    <div class="form-group"><label>Delay (ms)</label><input type="number" name="delay" value="5" step="0.1" min="0" required></div>
+                    <div class="form-group"><label>Bandwidth (Mbps)</label><input type="number" name="bandwidth" value="100" step="1" min="1" required></div>
+                </div>
+                <button type="submit" class="btn">➕ Add Link</button>
+            </form>
+            {% if routers %}
+            <div style="margin-top:1rem">
+                <label>Active Routers ({{ routers|length }}) — Network is ready for route computation</label>
+                <div class="net-summary">
+                    <span class="net-badge">{{ routers|length }} routers</span>
+                    <span class="net-badge">✅ Topology built</span>
+                    {% if net_type %}<span class="net-badge" style="background:rgba(243,156,18,0.1);border-color:rgba(243,156,18,0.4);color:#d4830a">📡 {{ net_type.type }} — {{ net_type.full }}</span>{% endif %}
+                </div>
+                {% if net_type %}
+                <div style="margin-top:0.6rem;padding:0.6rem 0.9rem;background:rgba(102,126,234,0.05);border-left:3px solid #667eea;border-radius:0 8px 8px 0;font-size:0.8rem;color:#555">
+                    <strong>📚 Ch1 — Network Classification:</strong> {{ net_type.desc }} · Preferred routing: <em>{{ net_type.preferred_algo }}</em>
+                </div>
+                {% endif %}
+                <div class="router-tags">
+                    {% for r in routers %}
+                    <span class="router-tag" title="{{ router_ip_map[r] if router_ip_map and r in router_ip_map else '' }}">
+                        {{ r }}
+                        {% if router_ip_map and r in router_ip_map %}
+                        <span style="font-weight:400;opacity:0.65;margin-left:0.3rem;font-size:0.74rem">{{ router_ip_map[r] }}</span>
+                        {% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <p style="color:#aaa;font-size:0.85rem;margin-top:0.75rem">No routers yet — add your first link above to get started.</p>
+            {% endif %}
+        </section>
+
+        <section class="form-section">
+            <h2>🧮 Compute Route — All 10 Algorithms</h2>
+            <p class="info-note">⚡ Runs all selected routing algorithms simultaneously and shows the optimal path with cost comparison. The same source and destination you added above.</p>
+            <form action="/compute_route" method="post">
+                <div class="form-grid">
+                    <div class="form-group"><label>Source Router</label><input type="text" name="source" placeholder="e.g. R1" required></div>
+                    <div class="form-group"><label>Destination Router</label><input type="text" name="destination" placeholder="e.g. R5" required></div>
+                </div>
+                <p class="algo-note">Select algorithms to compare (leave all unchecked = run all 10):</p>
+                <div class="algo-grid">
+                    {% for name in algo_names %}
+                    <label class="algo-label">
+                        <input type="checkbox" name="algorithms" value="{{ name }}">
+                        <span>{{ name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn">⚡ Find Optimal Path</button>
+            </form>
+        </section>
+
+        <hr>
+
+        <section class="form-section">
+            <h2>⚠️ Apply Congestion</h2>
+            <p class="info-note">🚦 Simulates network congestion on a specific link (increases its cost). Re-run route computation after applying to see algorithm re-routing decisions.</p>
+            <form action="/apply_congestion" method="post">
+                <div class="form-grid">
+                    <div class="form-group"><label>Source Router</label><input type="text" name="source" placeholder="e.g. R1" required></div>
+                    <div class="form-group"><label>Destination Router</label><input type="text" name="destination" placeholder="e.g. R2" required></div>
+                    <div class="form-group"><label>Congestion Value (ms penalty)</label><input type="number" name="value" step="0.1" min="0" value="10" required></div>
+                </div>
+                <button type="submit" class="btn btn-sm" style="background:linear-gradient(135deg,#f39c12,#e67e22)">⚠️ Apply Congestion</button>
+            </form>
+        </section>
+
+        <section class="form-section">
+            <h2>🛑 Simulate Link Failure</h2>
+            <p class="info-note">💥 Removes a link entirely from the topology — simulates a physical link failure or router crash. Algorithms will find alternate paths.</p>
+            <form action="/remove_link" method="post">
+                <div class="form-grid">
+                    <div class="form-group"><label>Source Router</label><input type="text" name="source" placeholder="e.g. R2" required></div>
+                    <div class="form-group"><label>Destination Router</label><input type="text" name="destination" placeholder="e.g. R3" required></div>
+                </div>
+                <button type="submit" class="btn btn-red btn-sm">🛑 Remove Link (Simulate Failure)</button>
+            </form>
+        </section>
+
+        <div class="action-links">
+            <form action="/simulate_traffic" method="post" style="flex:1;min-width:180px">
+                <button type="submit" class="btn btn-green" style="width:100%;justify-content:center">🌊 Simulate Traffic Spike</button>
+            </form>
+            <a href="/reset" class="btn btn-green">🔄 Reset Congestion</a>
+            <a href="/health_report" class="btn" style="background:linear-gradient(135deg,#2c3e50,#34495e);flex:1;min-width:180px;justify-content:center">🩺 Health Report</a>
+        </div>
+        <!-- Topology Persistence -->
+        <div class="action-links" style="margin-top:0.75rem">
+            <form action="/save_topology" method="post" style="flex:1;min-width:180px">
+                <button type="submit" class="btn" style="width:100%;justify-content:center;background:linear-gradient(135deg,#1a6b3a,#27ae60)">💾 Save Topology</button>
+            </form>
+            <form action="/load_topology" method="post" style="flex:1;min-width:180px">
+                <button type="submit" class="btn" style="width:100%;justify-content:center;background:linear-gradient(135deg,#1a3a6b,#2980b9)">📂 Load Topology</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── IP ROUTE TAB ── -->
+    <div id="tab-ip" class="tab-panel">
+        <section class="form-section">
+            <h2>🌍 Real IP Route Discovery</h2>
+            <p style="color:#666;font-size:0.9rem;margin-bottom:1rem">
+                Enter a source IP and destination IP. The system simulates a real ISP-grade traceroute,
+                maps the hop-by-hop network path (with ASN/ISP info), then runs all routing algorithms on it.
+            </p>
+            <p class="info-note">💡 Each octet of an IPv4 address must be between <strong>0 and 255</strong>. Example: <code>192.168.1.1</code>, <code>8.8.8.8</code>, <code>10.0.0.1</code></p>
+            <form action="/compute_ip_route" method="post" id="ip-route-form">
+                <div class="ip-pair-grid">
+                    <div class="form-group">
+                        <label>Source IP / Hostname</label>
+                        <input type="text" name="src_ip" id="src_ip" placeholder="e.g. 192.168.1.1" required oninput="validateIPField(this,'src-fb')">
+                        <div class="ip-feedback" id="src-fb"></div>
+                    </div>
+                    <div class="ip-arrow">→</div>
+                    <div class="form-group">
+                        <label>Destination IP / Hostname</label>
+                        <input type="text" name="dst_ip" id="dst_ip" placeholder="e.g. 8.8.8.8" required oninput="validateIPField(this,'dst-fb')">
+                        <div class="ip-feedback" id="dst-fb"></div>
+                    </div>
+                </div>
+                <p class="algo-note">Quick examples:</p>
+                <div class="quick-fill">
+                    <button type="button" class="quick-btn" onclick="fill('192.168.1.1','8.8.8.8')">LAN → Google DNS</button>
+                    <button type="button" class="quick-btn" onclick="fill('10.0.0.1','1.1.1.1')">Private → Cloudflare</button>
+                    <button type="button" class="quick-btn" onclick="fill('172.16.0.1','13.107.42.14')">Corp → Microsoft</button>
+                    <button type="button" class="quick-btn" onclick="fill('192.168.0.1','104.16.123.96')">Home → CDN Edge</button>
+                    <button type="button" class="quick-btn" onclick="fill('10.10.0.1','52.86.0.1')">Private → AWS</button>
+                </div>
+                <br>
+                <p class="algo-note">Select algorithms (leave all unchecked = run all 10):</p>
+                <div class="algo-grid">
+                    {% for name in algo_names %}
+                    <label class="algo-label">
+                        <input type="checkbox" name="ip_algorithms" value="{{ name }}">
+                        <span>{{ name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn" id="ip-submit-btn">🔍 Discover & Analyze Route</button>
+            </form>
+        </section>
+    </div>
+
+</div>
+<script>
+function showTab(id, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.nav-pill').forEach(b=>b.classList.remove('active'));
+    document.getElementById('tab-'+id).classList.add('active');
+    btn.classList.add('active');
+}
+
+function fill(src, dst) {
+    const srcEl = document.getElementById('src_ip');
+    const dstEl = document.getElementById('dst_ip');
+    srcEl.value = src;
+    dstEl.value = dst;
+    validateIPField(srcEl, 'src-fb');
+    validateIPField(dstEl, 'dst-fb');
+}
+
+// Real-time IP validation with first-octet warning
+function validateIPField(input, feedbackId) {
+    const ip = input.value.trim();
+    const fb = document.getElementById(feedbackId);
+
+    if (!ip) {
+        fb.className = 'ip-feedback';
+        input.className = input.className.replace(/\s*input-(error|warn|ok)/g, '');
+        return;
+    }
+
+    // Immediate first-octet check as user types
+    const parts = ip.split('.');
+    if (parts.length >= 1 && parts[0] !== '') {
+        const first = parseInt(parts[0], 10);
+        if (!isNaN(first) && first > 255) {
+            fb.textContent = `⚠ First octet '${first}' exceeds 255. IP octets must be 0–255. Did you mean ${first % 256}.x.x.x?`;
+            fb.className = 'ip-feedback warn show';
+            input.classList.remove('input-ok', 'input-error');
+            input.classList.add('input-warn');
+            return;
+        }
+    }
+
+    // Check each typed octet for > 255 as user types
+    for (let i = 0; i < parts.length; i++) {
+        if (parts[i] === '') continue;
+        const val = parseInt(parts[i], 10);
+        if (!isNaN(val) && val > 255) {
+            const ordinals = ['first','second','third','fourth'];
+            fb.textContent = `⚠ Octet ${i+1} value '${val}' exceeds 255. Each octet must be between 0 and 255.`;
+            fb.className = 'ip-feedback warn show';
+            input.classList.remove('input-ok', 'input-error');
+            input.classList.add('input-warn');
+            return;
+        }
+    }
+
+    // Full validation only when all 4 octets are present
+    if (parts.length === 4 && parts.every(p => p !== '')) {
+        fetch('/api/validate_ip', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ip: ip})
+        }).then(r => r.json()).then(data => {
+            if (data.warning) {
+                fb.textContent = data.warning;
+                fb.className = 'ip-feedback warn show';
+                input.classList.remove('input-ok', 'input-error');
+                input.classList.add('input-warn');
+            } else if (data.error) {
+                fb.textContent = '❌ ' + data.error;
+                fb.className = 'ip-feedback error show';
+                input.classList.remove('input-ok', 'input-warn');
+                input.classList.add('input-error');
+            } else {
+                fb.textContent = '✅ Valid IP address';
+                fb.className = 'ip-feedback ok show';
+                input.classList.remove('input-error', 'input-warn');
+                input.classList.add('input-ok');
+            }
+        }).catch(() => {
+            fb.className = 'ip-feedback';
+        });
+    } else {
+        fb.className = 'ip-feedback';
+        input.classList.remove('input-error', 'input-warn', 'input-ok');
+    }
+}
+</script>
+</body>
+</html>
