@@ -2,8 +2,7 @@
 
 A Flask web application that simulates and visualises network routing algorithms with real-time congestion modelling, packet analysis, and live network diagnostics.
 
-Built as a Computer Networks course project (Group 10).
-
+Built as a Computer Networks project.
 ---
 
 ## Features
